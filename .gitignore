@@ -1,0 +1,23 @@
+# Environment variables
+.env
+
+# Dependencies
+node_modules/
+.venv/
+
+# Python cache & Logs
+__pycache__/
+*.pyc
+*.log
+
+# Data Scrapping
+data/daily_scrapes/
+
+# OS & Editor generated files
+Thumbs.db
+Desktop.ini
+.vscode/
+
+# Build artifacts
+dist/
+build/
