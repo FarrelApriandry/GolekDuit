@@ -81,7 +81,6 @@ async function checkmarketMakermology(ticker) {
         const data = response.data.data;
         if (!data || !data.buy || !data.sell) return "⚪ Unknown Data";
 
-        // Take the last buy and sell data points to analyze the most recent market activity
         const lastBuy = data.buy[data.buy.length - 1];
         const lastSell = data.sell[data.sell.length - 1];
 
@@ -89,19 +88,32 @@ async function checkmarketMakermology(ticker) {
 
         const buyLot = parseInt(lastBuy.lot.raw);
         const sellLot = parseInt(lastSell.lot.raw);
+        const totalLot = buyLot + sellLot;
 
-        // Formating number to millions for better readability in the alert message
+        if (totalLot === 0) return "⚪ No Activity";
+
+        // Formatting number to millions
         const formatLot = (num) => (num / 1000000).toFixed(2) + "M";
+        const bFormat = formatLot(buyLot);
+        const sFormat = formatLot(sellLot);
 
-        if (buyLot > sellLot) {
-            return `🐋 ACUMULATION (B: ${formatLot(buyLot)} vs S: ${formatLot(sellLot)})`;
-        } else if (sellLot > buyLot) {
-            return `🚨 DISTRIBUTON (B: ${formatLot(buyLot)} vs S: ${formatLot(sellLot)})`;
+        // 🛡️ ZERO TRUST PARAMETER: Hitung rasio dominasi
+        const buyRatio = buyLot / totalLot;
+        const sellRatio = sellLot / totalLot;
+
+        if (buyRatio >= 0.60) {
+            return `🐋 STRONG ACC (B: ${bFormat} | S: ${sFormat})`;
+        } else if (buyRatio > 0.53 && buyRatio < 0.60) {
+            return `📈 NORMAL ACC (B: ${bFormat} | S: ${sFormat})`;
+        } else if (sellRatio >= 0.60) {
+            return `🚨 STRONG DIST (B: ${bFormat} | S: ${sFormat})`;
+        } else if (sellRatio > 0.53 && sellRatio < 0.60) {
+            return `📉 NORMAL DIST (B: ${bFormat} | S: ${sFormat})`;
         } else {
-            return "⚖️ BALANCED";
+            return `⚖️ BALANCED (B: ${bFormat} | S: ${sFormat})`;
         }
     } catch (error) {
-        console.error(`[WARNING] Failed to fetch marketmaker mology for ${ticker}. Delay/Rate Limit?`);
+        console.error(`[WARNING] Failed to fetch marketmakermology for ${ticker}. Delay/Rate Limit?`);
         return "⚠️ API Error";
     }
 }
@@ -133,7 +145,7 @@ async function runFiltrationEngine() {
         if (!company || !company.Swing_Data) return;
         
         // 🛡️ ZERO TRUST TICKER RECOVERY
-        // Cek TickerSymbol dulu, kalo gaada cari di profileData, kalo gaada cari di Level Atas
+        // Check TickerSymbol, then profileData.TickerSymbol, then Symbol, else mark as UNKNOWN
         const ticker = company.TickerSymbol || 
                        (company.profileData && company.profileData.TickerSymbol) || 
                        company.Symbol || 
@@ -144,8 +156,8 @@ async function runFiltrationEngine() {
 
         const close = swing.market_data.current_close;
 
-        // 🛑 ANTI-GOCAP & LIQUIDITY FILTER
-        // Saham di bawah 60 seringkali tidak likuid atau berisiko tinggi
+        // 🛑 ANTI-60 & LIQUIDITY FILTER
+        // Ticker under 60 IDR or with very low volume is usually not suitable for swing trading due to high volatility and low liquidity.
         if (close <= 60 || swing.market_data.volume_today < 1000) return;
 
         const fibo500 = swing.technical_signals.fibo_levels.level_500;
@@ -184,8 +196,8 @@ async function runFiltrationEngine() {
         return;
     }
 
-    // ⚔️ ZERO TRUST FILTER: Urutkan dari R/R paling gede, ambil Top 10 aja!
-    // Biar pesan Telegram ga muntah dan lo ga pusing milihnya.
+    // ⚔️ ZERO TRUST FILTER: Sort by R/R ratio
+    // Take top 10 to avoid overwhelming the Telegram channel with too many alerts.
     validSwings.sort((a, b) => b.rrRatio - a.rrRatio);
     const topSwings = validSwings.slice(0, 10);
 
