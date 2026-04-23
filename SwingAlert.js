@@ -121,6 +121,63 @@ async function checkmarketMakermology(ticker) {
 }
 
 // ==========================================
+// 🧱 THE ORDERBOOK WALL DETECTOR MODULE
+// ==========================================
+async function checkOrderbookWall(ticker) {
+    const url = `https://indonesia-stock-exchange-idx.p.rapidapi.com/api/emiten/${ticker}/orderbook`;
+    try {
+        const response = await axios.get(url, {
+            headers: {
+                'x-rapidapi-host': 'indonesia-stock-exchange-idx.p.rapidapi.com',
+                'x-rapidapi-key': RAPIDAPI_KEY,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const data = response.data.data;
+        if (!data) return "⚪ Unknown Orderbook";
+
+        let maxOfferLot = 0;
+        let maxOfferPrice = 0;
+        let maxBidLot = 0;
+        let maxBidPrice = 0;
+
+        const offers = data.offer || data.ask || data.asks || data.offers || [];
+        const bids = data.bid || data.bids || [];
+
+        // Find the thickest Offer wall (Resistance)
+        offers.forEach(o => {
+            const lot = parseInt(o.lot || o.volume || 0);
+            if (lot > maxOfferLot) {
+                maxOfferLot = lot;
+                maxOfferPrice = o.price;
+            }
+        });
+
+        // Find the thickest Bid wall (Support)
+        bids.forEach(b => {
+            const lot = parseInt(b.lot || b.volume || 0);
+            if (lot > maxBidLot) {
+                maxBidLot = lot;
+                maxBidPrice = b.price;
+            }
+        });
+
+        const formatLot = (num) => (num / 1000).toFixed(1) + "k";
+
+        let wallStr = "";
+        if (maxOfferLot > 0) wallStr += `🧱 Res: ${formatLot(maxOfferLot)} lot @ Rp${maxOfferPrice} | `;
+        if (maxBidLot > 0) wallStr += `🛡️ Sup: ${formatLot(maxBidLot)} lot @ Rp${maxBidPrice}`;
+
+        return wallStr !== "" ? wallStr : "⚪ No Wall Detected";
+
+    } catch (error) {
+        console.error(`[WARNING] Failed to fetch orderbook for ${ticker}.`);
+        return "⚠️ API Error";
+    }
+}
+
+// ==========================================
 // ⚙️ THE FILTRATION ENGINE (MAIN LOGIC)
 // ==========================================
 async function runFiltrationEngine() {
@@ -213,20 +270,28 @@ async function runFiltrationEngine() {
 
     let rank = 1;
     for (const s of topSwings) {
-        console.log(`[API] Checking ${s.ticker}...`);
+
+        console.log(`[API] Checking Market Maker for ${s.ticker}...`);
         const marketMakerStatus = await checkmarketMakermology(s.ticker);
+        
+        await sleep(1000);
+
+        console.log(`[API] Checking Orderbook Wall for ${s.ticker}...`);
+        const orderbookWall = await checkOrderbookWall(s.ticker);
         
         message += `<b>${rank}. ${s.ticker}</b> [${s.reason}]\n`;
         message += `├ marketMaker: <b>${marketMakerStatus}</b>\n`;
+        message += `├ Wall : ${orderbookWall}\n`;
         message += `├ Entry : Rp ${s.entry}\n`;
         message += `├ Target: Rp ${s.target} (+15%)\n`;
         message += `├ Stop L: Rp ${s.stopLoss} (-3%)\n`;
         message += `└ R/R   : 1:${s.rrRatio}\n\n`;
         
         s.marketMakerStatus = marketMakerStatus;
+        s.orderbookWall = orderbookWall;
         rank++;
 
-        await sleep(1500); // Delay 1.5 second between API calls to avoid hitting rate limits
+        await sleep(1000); // Delay 1.5 second between API calls to avoid hitting rate limits
     }
 
     message += `<i>Disclaimer: Trade at your own risk. Do not FOMO!</i>`;
@@ -244,7 +309,8 @@ async function runFiltrationEngine() {
         "Target": `Rp ${s.target}`,
         "Stop Loss": `Rp ${s.stopLoss}`,
         "Signal": s.reason.replace(/<\/?[^>]+(>|$)/g, ""),
-        "Market Maker": s.marketMakerStatus
+        "Market Maker": s.marketMakerStatus,
+        "Wall": s.orderbookWall
     }));
 
     console.table(tableData);
