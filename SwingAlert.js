@@ -269,29 +269,54 @@ async function runFiltrationEngine() {
     message += `Found ${validSwings.length} candidates, showing <b>TOP ${topSwings.length}</b> best R/R:\n\n`;
 
     let rank = 1;
-    for (const s of topSwings) {
+    let goodEmitens = []; // Array to store the 'pull the trigger' list
 
+    for (const s of topSwings) {
         console.log(`[API] Checking Market Maker for ${s.ticker}...`);
         const marketMakerStatus = await checkmarketMakermology(s.ticker);
         
-        await sleep(1000);
+        await sleep(1000); 
 
         console.log(`[API] Checking Orderbook Wall for ${s.ticker}...`);
         const orderbookWall = await checkOrderbookWall(s.ticker);
-        
+
+        // 🧠 QUICK SUMMARY LOGIC PER EMITEN
+        let emitenSummary = "";
+        const isAcc = marketMakerStatus.includes("ACC");
+        const isDist = marketMakerStatus.includes("DIST");
+        const isWallClear = !orderbookWall.includes("Res") || parseInt(orderbookWall.match(/Rp(\d+)/)?.[1] || 0) > s.target;
+
+        if (isAcc && s.reason.includes("Vol")) {
+            emitenSummary = `✨ <b>Prime Setup!</b> (${s.reason}) + MMaker is <b>Accumulating</b>. The road is clear! 🛣️`;
+            goodEmitens.push({ ticker: s.ticker, entry: s.entry });
+        } else if (isDist) {
+            emitenSummary = `⚠️ <b>Watch Out!</b> Technicals look sweet, but whales are dumping heavily.`;
+        } else {
+            emitenSummary = `⚖️ <b>Wait & See.</b> Market forces are currently playing tug-of-war.`;
+        }
+
         message += `<b>${rank}. ${s.ticker}</b> [${s.reason}]\n`;
-        message += `├ marketMaker: <b>${marketMakerStatus}</b>\n`;
-        message += `├ Wall : ${orderbookWall}\n`;
-        message += `├ Entry : Rp ${s.entry}\n`;
-        message += `├ Target: Rp ${s.target} (+15%)\n`;
-        message += `├ Stop L: Rp ${s.stopLoss} (-3%)\n`;
-        message += `└ R/R   : 1:${s.rrRatio}\n\n`;
+        message += `├ MMaker : <b>${marketMakerStatus}</b>\n`;
+        message += `├ Wall   : ${orderbookWall}\n`;
+        message += `├ Summary: <i>${emitenSummary}</i>\n`; // Quick summary per ticker
+        message += `├ Entry  : Rp ${s.entry}\n`;
+        message += `├ Target : Rp ${s.target} (+15%)\n`;
+        message += `└ R/R    : 1:${s.rrRatio}\n\n`;
         
         s.marketMakerStatus = marketMakerStatus;
         s.orderbookWall = orderbookWall;
         rank++;
 
-        await sleep(1000); // Delay 1.5 second between API calls to avoid hitting rate limits
+        await sleep(1500); 
+    }
+
+    // 💡 FINAL SUMMARY & VERDICT
+    if (goodEmitens.length > 0) {
+        message += `💡 <b>THE VERDICT & ACTION PLAN:</b>\n`;
+        const listGood = goodEmitens.map(e => `${e.ticker} (@${e.entry})`).join(", ");
+        message += `Keep a close radar on <b>${listGood}</b>. If they hit the entry zone, pull the trigger! 🔥\n\n`;
+    } else {
+        message += `💡 <b>THE VERDICT:</b>\nNo pristine setups today. The market is too noisy. Cash is King, stay on the sidelines. 🧘‍♂️\n\n`;
     }
 
     message += `<i>Disclaimer: Trade at your own risk. Do not FOMO!</i>`;
