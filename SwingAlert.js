@@ -65,9 +65,9 @@ function getLatestBatchFile() {
     return files.length > 0 ? files[0].name : null;
 }
 
-// ==========================================
+// ==============================================
 // 🐋 THE MARKETMAKERMOLOGY MODULE (INVEZGO API)
-// ==========================================
+// =============================================
 async function checkmarketMakermology(ticker) {
     const url = `https://indonesia-stock-exchange-idx.p.rapidapi.com/api/emiten/tradebook-chart?timeInterval=1m&symbol=${ticker}`;
     try {
@@ -81,6 +81,8 @@ async function checkmarketMakermology(ticker) {
         const data = response.data.data;
         if (!data || !data.buy || !data.sell) return "⚪ Unknown Data";
 
+        if (data.buy.length === 0 || data.sell.length === 0) return "⚪ No Transaction History";
+
         const lastBuy = data.buy[data.buy.length - 1];
         const lastSell = data.sell[data.sell.length - 1];
 
@@ -92,12 +94,12 @@ async function checkmarketMakermology(ticker) {
 
         if (totalLot === 0) return "⚪ No Activity";
 
-        // Formatting number to millions
+        // Formatting number to millions for better readability in alerts
         const formatLot = (num) => (num / 1000000).toFixed(2) + "M";
         const bFormat = formatLot(buyLot);
         const sFormat = formatLot(sellLot);
 
-        // 🛡️ ZERO TRUST PARAMETER: Hitung rasio dominasi
+        // Calculate dominance ratio and determine market maker status
         const buyRatio = buyLot / totalLot;
         const sellRatio = sellLot / totalLot;
 
@@ -144,7 +146,6 @@ async function runFiltrationEngine() {
     candidates.forEach(company => {
         if (!company || !company.Swing_Data) return;
         
-        // 🛡️ ZERO TRUST TICKER RECOVERY
         // Check TickerSymbol, then profileData.TickerSymbol, then Symbol, else mark as UNKNOWN
         const ticker = company.TickerSymbol || 
                        (company.profileData && company.profileData.TickerSymbol) || 
@@ -156,7 +157,6 @@ async function runFiltrationEngine() {
 
         const close = swing.market_data.current_close;
 
-        // 🛑 ANTI-60 & LIQUIDITY FILTER
         // Ticker under 60 IDR or with very low volume is usually not suitable for swing trading due to high volatility and low liquidity.
         if (close <= 60 || swing.market_data.volume_today < 1000) return;
 
@@ -196,7 +196,7 @@ async function runFiltrationEngine() {
         return;
     }
 
-    // ⚔️ ZERO TRUST FILTER: Sort by R/R ratio
+    // ZERO TRUST FILTER: Sort by R/R ratio
     // Take top 10 to avoid overwhelming the Telegram channel with too many alerts.
     validSwings.sort((a, b) => b.rrRatio - a.rrRatio);
     const topSwings = validSwings.slice(0, 10);
