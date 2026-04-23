@@ -1,0 +1,14 @@
+{
+  "data": [
+    {"TickerSymbol": "BBCA"}, {"TickerSymbol": "BBRI"}, {"TickerSymbol": "BMRI"},
+    {"TickerSymbol": "BBNI"}, {"TickerSymbol": "TLKM"}, {"TickerSymbol": "ASII"},
+    {"TickerSymbol": "GOTO"}, {"TickerSymbol": "AMMN"}, {"TickerSymbol": "BREN"},
+    {"TickerSymbol": "CUAN"}, {"TickerSymbol": "BRPT"}, {"TickerSymbol": "TPIA"},
+    {"TickerSymbol": "ICBP"}, {"TickerSymbol": "INDF"}, {"TickerSymbol": "UNVR"},
+    {"TickerSymbol": "KLBF"}, {"TickerSymbol": "PGEO"}, {"TickerSymbol": "PTBA"},
+    {"TickerSymbol": "ADRO"}, {"TickerSymbol": "ITMG"}, {"TickerSymbol": "UNTR"},
+    {"TickerSymbol": "AKRA"}, {"TickerSymbol": "MEDC"}, {"TickerSymbol": "ANTM"},
+    {"TickerSymbol": "MNCN"}, {"TickerSymbol": "BTPS"}, {"TickerSymbol": "NIRO"},
+    {"TickerSymbol": "ARGO"}, {"TickerSymbol": "KICI"}, {"TickerSymbol": "FORE"}
+  ]
+}

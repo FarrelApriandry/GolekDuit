@@ -1,15 +1,16 @@
 
+
 """
 IdxScrapper.py
 
-This script scrapes company profile and market data from the Indonesia Stock Exchange (IDX) website for a given list of stock tickers. It extracts fundamental data using Nuxt.js payloads, fetches real-time market data using Yahoo Finance, calculates technical indicators, and exports the results to a JSON file.
+This script scrapes company profiles and market data from the Indonesia Stock Exchange (IDX) website for a given list of stock tickers. It extracts fundamental data using Nuxt.js payloads, fetches real-time market data using Yahoo Finance, calculates technical indicators, and exports the results to a JSON file.
 
 Features:
 - Robust HTML extraction with retry logic
 - Nuxt.js state extraction using Node.js
-- Real-time market data and technical analysis (Fibonacci, MA20, volume breakout)
+- Real-time market data and technical analysis (Fibonacci retracement, MA20, volume breakout)
 - Batch processing for multiple tickers
-- English variable names and documentation
+- English variable names and documentation throughout
 """
 
 from curl_cffi import requests
@@ -23,6 +24,7 @@ from datetime import datetime
 import random
 import yfinance as yf
 
+
 async def scrape_idx_company(ticker_symbol: str, date_str: str, time_str: str):
     """
     Scrape IDX company profile and market data for a given ticker symbol.
@@ -31,6 +33,8 @@ async def scrape_idx_company(ticker_symbol: str, date_str: str, time_str: str):
         ticker_symbol (str): Stock ticker symbol (e.g., 'BBCA').
         date_str (str): Date string in DD-MM-YYYY format.
         time_str (str): Time string in HH.MM.SS format.
+    Returns:
+        dict or None: The profile data with technical analysis, or None if failed.
     """
     ticker = ticker_symbol.upper()
     html_url = f'https://www.idx.co.id/id/perusahaan-tercatat/profil-perusahaan-tercatat/{ticker}'
@@ -39,7 +43,7 @@ async def scrape_idx_company(ticker_symbol: str, date_str: str, time_str: str):
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
     }
 
-    print(f"\n📡 [TARGET: {ticker}] Accessing IDX website...")
+    print(f"\n[INFO] [TARGET: {ticker}] Accessing IDX website...")
 
     html_text = ""
     max_retries = 3
@@ -59,23 +63,23 @@ async def scrape_idx_company(ticker_symbol: str, date_str: str, time_str: str):
                         html_text = response.text
                         break  # Success, exit retry loop
                     elif response.status_code in [503, 403]:
-                        print(f"⚠️ [ATTEMPT {attempt+1}/{max_retries}] Blocked by Cloudflare (Status {response.status_code}).")
+                        print(f"[WARNING] [ATTEMPT {attempt+1}/{max_retries}] Blocked by Cloudflare (Status {response.status_code}).")
                         retry_delay = random.uniform(5.0, 9.0)
                         print(f"   Waiting {retry_delay:.2f} seconds before retrying...")
                         await asyncio.sleep(retry_delay)
                     else:
-                        print(f"❌ Failed to load HTML for {ticker}. Status Code: {response.status_code}")
+                        print(f"[ERROR] Failed to load HTML for {ticker}. Status Code: {response.status_code}")
                         return
             except Exception as e:
-                print(f"⚠️ [ATTEMPT {attempt+1}/{max_retries}] Connection error: {e}")
+                print(f"[WARNING] [ATTEMPT {attempt+1}/{max_retries}] Connection error: {e}")
                 await asyncio.sleep(5)
 
         if not html_text:
-            print(f"❌ Giving up on {ticker}. Security is too strict, skipping...")
+            print(f"[ERROR] Giving up on {ticker}. Security is too strict, skipping...")
             return
 
         # 2. Extract Fundamental Data (via Nuxt/Node.js)
-        print(f"✅ HTML success! Extracting Nuxt.js payload for {ticker}...")
+        print(f"[INFO] HTML successfully retrieved! Extracting Nuxt.js payload for {ticker}...")
         soup = BeautifulSoup(html_text, 'html.parser')
 
         nuxt_script = None
@@ -85,10 +89,10 @@ async def scrape_idx_company(ticker_symbol: str, date_str: str, time_str: str):
                 break
 
         if not nuxt_script:
-            print(f"❌ Failed to find Nuxt.js state for {ticker}!")
+            print(f"[ERROR] Failed to find Nuxt.js state for {ticker}!")
             return
 
-        js_hack = f"""
+        js_payload = f"""
         const window = {{}};
         const document = {{}};
         const navigator = {{}};
@@ -97,7 +101,7 @@ async def scrape_idx_company(ticker_symbol: str, date_str: str, time_str: str):
         """
 
         with open("idx_bypass.js", "w", encoding="utf-8") as f:
-            f.write(js_hack)
+            f.write(js_payload)
 
         process = subprocess.run(
             ["node", "idx_bypass.js"],
@@ -107,29 +111,29 @@ async def scrape_idx_company(ticker_symbol: str, date_str: str, time_str: str):
         )
 
         if process.returncode != 0:
-            print(f"❌ Node.js Error: {process.stderr}")
+            print(f"[ERROR] Node.js Error: {process.stderr}")
             return
 
         nuxt_data = json.loads(process.stdout)
         if os.path.exists("idx_bypass.js"):
             os.remove("idx_bypass.js")
 
-        print(f"🧹 Cleaning up web UI artifacts...")
+        print(f"[INFO] Cleaning up web UI artifacts...")
         try:
             profile_data = nuxt_data["data"][0]["profileData"]
         except (KeyError, IndexError):
             profile_data = nuxt_data
 
         # 3. Inject Real-Time Price & Technical Analysis (via yfinance)
-        print(f"📈 Fetching Market Data & Calculating Technicals for {ticker}...")
+        print(f"[INFO] Fetching market data and calculating technical indicators for {ticker}...")
         try:
             yf_ticker = yf.Ticker(f"{ticker}.JK")
 
-            # Fetch 1 month history
-            hist = yf_ticker.history(period="1mo")
+            # Run yfinance in a background thread for async performance
+            hist = await asyncio.to_thread(yf_ticker.history, period="1mo")
 
             if hist.empty:
-                print(f"⚠️ [YFINANCE WARNING] Empty history data for {ticker}. Possibly delisted/suspended.")
+                print(f"[WARNING] [YFINANCE] Empty history data for {ticker}. Possibly delisted or suspended.")
                 profile_data['Swing_Data'] = None
             else:
                 # Prepare today's and previous day's data
@@ -176,16 +180,17 @@ async def scrape_idx_company(ticker_symbol: str, date_str: str, time_str: str):
                     }
                 }
 
-                print(f"💵 Close: Rp {current_close} | Volume Breakout: {is_volume_breakout} | Fibo 50%: Rp {fibo_500:.1f}")
+                print(f"[INFO] Close: Rp {current_close} | Volume Breakout: {is_volume_breakout} | Fibo 50%: Rp {fibo_500:.1f}")
 
+                profile_data['TickerSymbol'] = ticker
                 profile_data['Swing_Data'] = swing_data
 
         except Exception as e:
             profile_data['Swing_Data'] = None
-            print(f"❌ Failed to calculate yfinance data for {ticker}: {e}")
+            print(f"[ERROR] Failed to calculate yfinance data for {ticker}: {e}")
 
         # 4. Export to JSON
-        print(f"📁 Preparing output directory...")
+        print(f"[INFO] Preparing output directory...")
 
         base_folder = "data/daily_scrapes"
         os.makedirs(base_folder, exist_ok=True)
@@ -202,65 +207,122 @@ async def scrape_idx_company(ticker_symbol: str, date_str: str, time_str: str):
         with open(full_file_path, "w", encoding="utf-8") as f:
             json.dump(profile_data, f, indent=4, ensure_ascii=False)
 
-        print(f"🎉 DATA {ticker} SUCCESSFULLY EXPORTED!")
+        print(f"[SUCCESS] Data for {ticker} successfully exported!")
         return profile_data
 
     except Exception as e:
-        print(f"❌ System Crash for {ticker}: {e}")
+        print(f"[ERROR] System crash for {ticker}: {e}")
         return None
+    
+
+async def fetch_idx_tickers():
+    """
+    The Zero Trust Seeker: Bypass IDX WAF entirely by scraping the live, 
+    community-maintained list of companies from Wikipedia.
+    """
+    print("\n[INFO] Bypassing IDX WAF: Scraping active tickers from Wikipedia...")
+    
+    # URL Daftar Emiten di Wikipedia
+    url = "https://id.wikipedia.org/wiki/Daftar_perusahaan_yang_tercatat_di_Bursa_Efek_Indonesia"
+    
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    }
+
+    try:
+        async with requests.AsyncSession(impersonate="chrome120", headers=headers) as session:
+            response = await session.get(url, timeout=20.0)
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                
+                # Wikipedia biasanya pake class 'wikitable' buat tabel datanya
+                tables = soup.find_all('table', class_='wikitable')
+                
+                tickers = []
+                for table in tables:
+                    rows = table.find_all('tr')[1:] # Skip header row
+                    
+                    for row in rows:
+                        cols = row.find_all(['td', 'th'])
+                        if len(cols) >= 2:
+                            # Kolom ke-2 (index 1) adalah "Kode"
+                            kode_text = cols[1].get_text(strip=True)
+                            
+                            # Format di Wiki biasanya "BEI: AALI"
+                            if "BEI:" in kode_text:
+                                ticker = kode_text.split("BEI:")[1].strip()
+                                
+                                # Bersihin kalo ada footnote kayak BBCA[1]
+                                ticker = ticker.split('[')[0].strip()
+                                
+                                # Pastiin panjangnya 4 huruf (standar ticker IDX)
+                                if len(ticker) == 4 and ticker.isalpha():
+                                    tickers.append(ticker)
+                
+                # Hilangkan duplikat dan urutkan sesuai abjad
+                tickers = sorted(list(set(tickers)))
+                print(f"[SUCCESS] Intercepted {len(tickers)} active tickers from Wikipedia!")
+                return tickers
+            else:
+                print(f"[ERROR] Failed to scrape Wikipedia. Status Code: {response.status_code}")
+                return []
+                
+    except Exception as e:
+        print(f"[ERROR] Wikipedia scraping failed: {e}")
+        return []
+
 
 # --- MAIN AUTOMATION ENTRY POINT ---
+async def process_with_semaphore(semaphore, ticker, current_date, current_time):
+    """
+    Wrap the scrape function with a semaphore for concurrency control.
+    Args:
+        semaphore (asyncio.Semaphore): The semaphore object for limiting concurrency.
+        ticker (str): The stock ticker symbol.
+        current_date (str): The current date string.
+        current_time (str): The current time string.
+    Returns:
+        dict or None: The result of the scrape function.
+    """
+    async with semaphore:
+        return await scrape_idx_company(ticker, current_date, current_time)
+
 async def main():
-    """
-    Main entry point for batch scraping IDX company data.
-    Prompts user for input (comma-separated tickers or a .txt file), then processes each ticker.
-    """
-    print("=== IDX HYBRID TERMINAL (Fundamental + Live Price) ===")
-    print("Input Options:")
-    print("1. Type tickers separated by commas (e.g., CITY, MNCN, BBCA)")
-    print("2. Type a .txt filename (e.g., target.txt)")
+    print("=== MONEY WATCHER: AUTONOMOUS SEEKER ENGINE ===")
 
-    user_input = input("Enter Target: ").strip()
+    # 1. Fetch all tickers from IDX
+    ticker_list = await fetch_idx_tickers()
 
-    if user_input.endswith('.txt'):
-        try:
-            with open(user_input, 'r') as f:
-                ticker_list = [line.strip().upper() for line in f if line.strip()]
-        except FileNotFoundError:
-            print(f"❌ File '{user_input}' not found!")
-            return
-    else:
-        ticker_list = [e.strip().upper() for e in user_input.split(',')]
-
-    print(f"\nTotal targets to scrape: {len(ticker_list)} tickers")
+    if not ticker_list:
+        print("[ERROR] Cannot proceed without tickers. Exiting...")
+        return
 
     # Take timestamp ONCE for the whole batch
     now = datetime.now()
     current_date = now.strftime("%d-%m-%Y")
     current_time = now.strftime("%H.%M.%S")
 
-    all_candidates = []
+    # 2. Set up concurrency limiter
+    MAX_CONCURRENT_TASKS = 15  # Process 15 stocks concurrently
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_TASKS)
 
-    for i, ticker in enumerate(ticker_list):
-        candidate = await scrape_idx_company(ticker, current_date, current_time)
-        if candidate:
-            all_candidates.append(candidate)
+    print(f"\n[INFO] Launching parallel engine: {MAX_CONCURRENT_TASKS} concurrent tasks...")
 
-        if i < len(ticker_list) - 1:
-            delay = random.uniform(3.5, 7.5)
-            print(f"\n⏳ [ANTI-BOT] Waiting {delay:.2f} seconds...")
-            await asyncio.sleep(delay)
+    # 3. Dispatch all tickers to the async event loop
+    tasks = [process_with_semaphore(semaphore, ticker, current_date, current_time) for ticker in ticker_list]
 
-    print("\n✅ ALL TARGETS SUCCESSFULLY SCRAPED!")
+    # Gather results in parallel
+    raw_results = await asyncio.gather(*tasks, return_exceptions=True)
 
+    # Filter valid results (exclude errors/None)
+    all_candidates = [res for res in raw_results if res and not isinstance(res, Exception)]
 
-    """
-    BATCH EXPORT LOGIC:
-    - If we have any valid candidates, we create a single JSON file containing all of them with a timestamp in the filename.
-    - The JSON structure includes metadata about the scrape (date, time, total candidates) and an array of candidate data.
-    """
+    print(f"\n[SUCCESS] All {len(all_candidates)} targets successfully scraped and processed!")
+
+    # BATCH EXPORT LOGIC
     if all_candidates:
-        print(f"📁 Preparing output directory for {len(all_candidates)} candidates...")
+        print(f"[INFO] Preparing output directory for {len(all_candidates)} candidates...")
         base_folder = "data/daily_scrapes"
         os.makedirs(base_folder, exist_ok=True)
 
@@ -284,10 +346,10 @@ async def main():
         with open(full_file_path, "w", encoding="utf-8") as f:
             json.dump(final_payload, f, indent=4, ensure_ascii=False)
 
-        print(f"🎉 BATCH DATA SUCCESSFULLY EXPORTED! File: {filename}")
-        print(f"📂 Location: {os.path.abspath(full_file_path)}")
+        print(f"[SUCCESS] Batch data successfully exported! File: {filename}")
+        print(f"[INFO] Location: {os.path.abspath(full_file_path)}")
     else:
-        print("⚠️ No valid candidates were scraped. No batch file created.")
+        print("[WARNING] No valid candidates were scraped. No batch file created.")
 
 if __name__ == "__main__":
     if sys.platform == 'win32':
