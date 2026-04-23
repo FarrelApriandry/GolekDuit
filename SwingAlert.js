@@ -22,6 +22,7 @@ const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
 const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
 const telegramChatId = process.env.TELEGRAM_CHAT_ID;
 const SCRAPE_DIR = path.join(__dirname, 'data', 'daily_scrapes');
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // ==========================================
 // 🚀 TELEGRAM SENDER MODULE
@@ -65,9 +66,9 @@ function getLatestBatchFile() {
 }
 
 // ==========================================
-// 🐋 THE BANDARMOLOGY MODULE (INVEZGO API)
+// 🐋 THE MARKETMAKERMOLOGY MODULE (INVEZGO API)
 // ==========================================
-async function checkBandarmology(ticker) {
+async function checkmarketMakermology(ticker) {
     const url = `https://indonesia-stock-exchange-idx.p.rapidapi.com/api/emiten/tradebook-chart?timeInterval=1m&symbol=${ticker}`;
     try {
         const response = await axios.get(url, {
@@ -100,7 +101,7 @@ async function checkBandarmology(ticker) {
             return "⚖️ BALANCED";
         }
     } catch (error) {
-        console.error(`[WARNING] Failed to fetch Bandarmology for ${ticker}. Delay/Rate Limit?`);
+        console.error(`[WARNING] Failed to fetch marketmaker mology for ${ticker}. Delay/Rate Limit?`);
         return "⚠️ API Error";
     }
 }
@@ -189,7 +190,7 @@ async function runFiltrationEngine() {
     const topSwings = validSwings.slice(0, 10);
 
     console.log(`🔥 Filtering down to TOP ${topSwings.length} best setups...`);
-    console.log(`🕵️‍♂️ Initiating Bandarmology Check for Top 10 via Invezgo API...`);
+    console.log(`🕵️‍♂️ Initiating MarketMaker mology Check for Top 10 via Invezgo API...`);
 
     // ==========================================
     // ✉️ MESSAGE FORMATTING & DISPATCH
@@ -201,24 +202,26 @@ async function runFiltrationEngine() {
     let rank = 1;
     for (const s of topSwings) {
         console.log(`[API] Checking ${s.ticker}...`);
-        const bandarStatus = await checkBandarmology(s.ticker);
+        const marketMakerStatus = await checkmarketMakermology(s.ticker);
         
         message += `<b>${rank}. ${s.ticker}</b> [${s.reason}]\n`;
-        message += `├ Bandar: <b>${bandarStatus}</b>\n`;
+        message += `├ marketMaker: <b>${marketMakerStatus}</b>\n`;
         message += `├ Entry : Rp ${s.entry}\n`;
         message += `├ Target: Rp ${s.target} (+15%)\n`;
         message += `├ Stop L: Rp ${s.stopLoss} (-3%)\n`;
         message += `└ R/R   : 1:${s.rrRatio}\n\n`;
         
-        s.bandarStatus = bandarStatus; // Simpan buat console.table nanti
+        s.marketMakerStatus = marketMakerStatus;
         rank++;
+
+        await sleep(1500); // Delay 1.5 second between API calls to avoid hitting rate limits
     }
 
     message += `<i>Disclaimer: Trade at your own risk. Do not FOMO!</i>`;
 
     // Print the message to terminal for verification before sending
     console.log("\n" + "=".repeat(100));
-    console.log("📊 TOP 10 SWING CANDIDATES & BANDARMOLOGY (TERMINAL LOG):");
+    console.log("📊 TOP 10 SWING CANDIDATES & marketMakerMOLOGY (TERMINAL LOG):");
     console.log("=".repeat(100));
     
     // Mapping data for console.table
@@ -229,11 +232,11 @@ async function runFiltrationEngine() {
         "Target": `Rp ${s.target}`,
         "Stop Loss": `Rp ${s.stopLoss}`,
         "Signal": s.reason.replace(/<\/?[^>]+(>|$)/g, ""),
-        "Bandar": s.bandarStatus
+        "Market Maker": s.marketMakerStatus
     }));
 
     console.table(tableData);
-    console.log("=".repeat(80) + "\n");
+    console.log("=".repeat(100) + "\n");
 
     await sendTelegramAlert(message);
 }
